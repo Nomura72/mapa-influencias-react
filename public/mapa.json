@@ -1,0 +1,22 @@
+{
+  "nodes": [
+    {
+      "id": "vigas",
+      "label": "Projeção de viga",
+      "category": "estrutura",
+      "impact": "alto"
+    },
+    {
+      "id": "forro",
+      "label": "Forro",
+      "category": "arquitetura",
+      "impact": "alto"
+    }
+  ],
+  "edges": [
+    {
+      "source": "vigas",
+      "target": "forro"
+    }
+  ]
+}
