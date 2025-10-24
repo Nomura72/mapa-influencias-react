@@ -10,7 +10,7 @@ export default defineConfig({
       /.*\.csb\.app$/, // qualquer subdomínio do CodeSandbox
       /.*\.codesandbox\.io$/, // domínios antigos do CSB
       "localhost",
-      "t7dj8r-5173.csb.app", // host exato que aparece no erro
+      "t7dj8r-4173.csb.app", // host exato que aparece no erro
     ],
     hmr: {
       clientPort: 443, // evita bloqueio de HMR por porta
@@ -23,7 +23,7 @@ export default defineConfig({
       /.*\.csb\.app$/,
       /.*\.codesandbox\.io$/,
       "localhost",
-      "t7dj8r-5173.csb.app",
+      "t7dj8r-4173.csb.app",
     ],
   },
 });
