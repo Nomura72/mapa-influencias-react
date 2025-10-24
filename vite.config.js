@@ -24,6 +24,7 @@ export default defineConfig({
       /.*\.codesandbox\.io$/,
       "localhost",
       "t7dj8r-5173.csb.app",
+      "t7dj8r-4173.csb.app"
     ],
   },
 });
