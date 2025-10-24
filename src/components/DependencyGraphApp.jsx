@@ -1,5 +1,15 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  forceSimulation,
+  forceManyBody,
+  forceLink,
+  forceCenter,
+  forceCollide,
+  forceX,
+  forceY
+} from 'd3-force';
+
 
 const CATEGORY_COLORS = {
   estrutura: '#3b82f6',
@@ -10,6 +20,16 @@ const CATEGORY_COLORS = {
 }
 
 const IMPACT_WIDTH = { baixo: 1.25, medio: 1.75, alto: 2.25, critico: 3 }
+
+// Parâmetros visuais e modos de layout
+const PADDING = 60;
+const NODE_RADIUS = 18;
+
+const LAYOUT_MODES = {
+  FORCE: "force",
+  RADIAL: "radial"
+};
+
 
 const initialData = {
   nodes: [
@@ -126,24 +146,54 @@ const initialData = {
   ]
 }
 
-function indexById(arr){ const m = new Map(); arr.forEach(d => m.set(d.id, d)); return m }
-
-function layout(nodes, edges, iterations=350, w=1200, h=700){
-  const n = nodes.length
-  nodes.forEach((node,i)=>{
-    node.x=(w/2)+Math.cos((i/n)*Math.PI*2)*(Math.min(w,h)/3)
-    node.y=(h/2)+Math.sin((i/n)*Math.PI*2)*(Math.min(w,h)/3)
-    node.vx=0; node.vy=0
-  })
-  const idIndex = Object.fromEntries(nodes.map((d,i)=>[d.id,i]))
-  const links = edges.map(e=>({source:idIndex[e.source], target:idIndex[e.target]}))
-  const k=0.1, repulsion=2500, damping=0.85
-  for(let it=0; it<iterations; it++){
-    for(let i=0;i<n;i++){ for(let j=i+1;j<n;j++){ const dx=nodes[j].x-nodes[i].x; const dy=nodes[j].y-nodes[i].y; const dist2=dx*dx+dy*dy+0.01; const f=repulsion/dist2; const fx=f*dx, fy=f*dy; nodes[i].vx-=fx; nodes[i].vy-=fy; nodes[j].vx+=fx; nodes[j].vy+=fy; } }
-    links.forEach(l=>{ const a=nodes[l.source], b=nodes[l.target]; const dx=b.x-a.x, dy=b.y-a.y; a.vx+=k*dx; a.vy+=k*dy; b.vx-=k*dx; b.vy-=k*dy; })
-    nodes.forEach(nd=>{ nd.vx*=damping; nd.vy*=damping; nd.x+=nd.vx*0.01; nd.y+=nd.vy*0.01; nd.x=Math.max(40,Math.min(w-40,nd.x)); nd.y=Math.max(40,Math.min(h-40,nd.y)); })
-  }
+function clampToBounds(nd, w, h, pad = PADDING) {
+  nd.x = Math.max(pad, Math.min(w - pad, nd.x));
+  nd.y = Math.max(pad, Math.min(h - pad, nd.y));
 }
+
+function linkDistance(e, base = 140) {
+  const srcImpact = e.source.impact || "medio";
+  const scale = { baixo: 0.9, medio: 1.0, alto: 1.15, critico: 1.35 }[srcImpact] || 1.0;
+  return base * scale;
+}
+
+function layoutForceD3(nodes, edges, w = 1200, h = 700) {
+  const sim = forceSimulation(nodes)
+    .force("charge", forceManyBody().strength(-1400))
+    .force("link", forceLink(edges).id(d => d.id).distance(e => linkDistance(e)))
+    .force("center", forceCenter(w / 2, h / 2))
+    .force("collide", forceCollide(NODE_RADIUS * 1.6));
+
+  sim.tick(300).stop();
+  nodes.forEach(nd => clampToBounds(nd, w, h));
+}
+
+function layoutRadialByCategory(nodes, edges, w = 1200, h = 700) {
+  const cats = ["estrutura", "arquitetura", "instalacoes", "documentacao", "coordenacao"];
+  const R = Math.min(w, h) * 0.32;
+  const cx = w / 2, cy = h / 2;
+
+  const target = new Map(
+    cats.map((c, i) => {
+      const a = (i / cats.length) * Math.PI * 2 - Math.PI / 2;
+      return [c, { x: cx + Math.cos(a) * R, y: cy + Math.sin(a) * R }];
+    })
+  );
+
+  const fx = forceX(d => (target.get(d.category)?.x ?? cx)).strength(0.2);
+  const fy = forceY(d => (target.get(d.category)?.y ?? cy)).strength(0.2);
+
+  const sim = forceSimulation(nodes)
+    .force("charge", forceManyBody().strength(-1200))
+    .force("link", forceLink(edges).id(d => d.id).distance(e => linkDistance(e, 120)))
+    .force("clusterX", fx)
+    .force("clusterY", fy)
+    .force("collide", forceCollide(NODE_RADIUS * 1.55));
+
+  sim.tick(300).stop();
+  nodes.forEach(nd => clampToBounds(nd, w, h));
+}
+
 
 function Legend(){
   const items=[
@@ -171,6 +221,7 @@ function getQueryParam(name){ if(typeof window==='undefined') return null; const
 
 export default function DependencyGraphApp(){
   const [data, setData] = useState(initialData)
+  const [layoutMode, setLayoutMode] = useState(LAYOUT_MODES.RADIAL);
   const [loading, setLoading] = useState(false)
   const [lastLoaded, setLastLoaded] = useState(null)
   const [selected, setSelected] = useState(null)
@@ -183,7 +234,17 @@ export default function DependencyGraphApp(){
 
   const nodes = useMemo(()=>data.nodes.map(d=>({...d})), [data])
   const edges = useMemo(()=>data.edges.map(d=>({...d})), [data])
-  useMemo(()=>layout(nodes, edges, 350, 1200, 700), [data])
+useMemo(() => {
+  const idIndex = new Map(nodes.map((d) => [d.id, d]));
+  const links = edges.map(e => ({ source: idIndex.get(e.source), target: idIndex.get(e.target) }));
+
+  if (layoutMode === LAYOUT_MODES.RADIAL) {
+    layoutRadialByCategory(nodes, links, 1200, 700);
+  } else {
+    layoutForceD3(nodes, links, 1200, 700);
+  }
+}, [data, layoutMode]);
+
 
   const svgRef = useRef(null)
   const viewBox = useZoomPan(svgRef)
@@ -209,7 +270,18 @@ export default function DependencyGraphApp(){
             <p className="text-sm text-neutral-600">Clique em um nó para ver o que ele influencia e por quem é influenciado. Use a busca para localizar um conceito.</p>
             {dataURL && <p className="text-xs text-neutral-500">Dados externos: <span className="underline break-all">{dataURL}</span>{lastLoaded ? ` • carregado em ${lastLoaded}` : ''}</p>}
           </div>
-          <Legend />
+          <Legend /> <div className="flex items-center gap-2">
+  <label className="text-xs text-neutral-600">Layout</label>
+  <select
+    className="rounded-lg border px-2 py-1 text-sm"
+    value={layoutMode}
+    onChange={(e) => setLayoutMode(e.target.value)}
+  >
+    <option value={LAYOUT_MODES.RADIAL}>Radial por categoria</option>
+    <option value={LAYOUT_MODES.FORCE}>Força (orgânico)</option>
+  </select>
+</div>
+
         </header>
 
         <aside className="col-span-3 bg-white rounded-2xl shadow p-4 flex flex-col gap-3">
