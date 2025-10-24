@@ -157,6 +157,14 @@ function linkDistance(e, base = 140) {
   return base * scale;
 }
 
+// Utilitário: cria um Map por id (id -> nó)
+function indexById(arr) {
+  const m = new Map();
+  arr.forEach((d) => m.set(d.id, d));
+  return m;
+}
+
+
 function layoutForceD3(nodes, edges, w = 1200, h = 700) {
   const sim = forceSimulation(nodes)
     .force("charge", forceManyBody().strength(-1400))
